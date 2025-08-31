@@ -14,6 +14,9 @@
 #include <linux/version.h>
 
 #include "smu.h"
+#include <linux/atomic.h>
+
+static atomic_t probe_count = ATOMIC_INIT(0);
 
 #ifndef KBUILD_MODNAME
     #define KBUILD_MODNAME "ryzen_smu"
@@ -377,6 +380,7 @@ static int ryzen_smu_probe(struct pci_dev *dev, const struct pci_device_id *id) 
 
     // Check that PM table options are supported before adding it to the attr list
     ret = smu_transfer_table_to_dram(g_driver.device);
+    pr_info("smu_transfer_table_to_dram returned 0x%x\n", ret);
     if (ret == SMU_Return_OK) {
         ret = smu_get_pm_table_version(g_driver.device, &g_driver.pm_table_version);
 pr_info("smu_get_pm_table_version returned 0x%x, version 0x%x\n", ret, g_driver.pm_table_version);
@@ -414,25 +418,32 @@ pr_info("smu_get_pm_table_version returned 0x%x, version 0x%x\n", ret, g_driver.
 
 _CONTINUE_SETUP:
     // Allocate the sysfs attr group with the parameters for use
-    g_driver.drv_kobj = kobject_create_and_add("ryzen_smu_drv", kernel_kobj);
-    if (!g_driver.drv_kobj) {
-        pr_err("Unable to create sysfs interface");
-        return -ENOMEM;
-    }
+    if (atomic_inc_return(&probe_count) == 1) {
+        g_driver.drv_kobj = kobject_create_and_add("ryzen_smu_drv", kernel_kobj);
+        if (!g_driver.drv_kobj) {
+            pr_err("Unable to create sysfs interface");
+            atomic_dec(&probe_count);
+            return -ENOMEM;
+        }
 
-    if (sysfs_create_group(g_driver.drv_kobj, &drv_attr_group))
-        kobject_put(g_driver.drv_kobj);
+        if (sysfs_create_group(g_driver.drv_kobj, &drv_attr_group)) {
+            kobject_put(g_driver.drv_kobj);
+            atomic_dec(&probe_count);
+        }
+    }
 
     return 0;
 }
 
 static void ryzen_smu_remove(struct pci_dev *dev) {
-    // Free allocated resources as well as the SMU
-    if (g_driver.pm_table)
-        kfree(g_driver.pm_table);
+    if (atomic_dec_and_test(&probe_count)) {
+        // Free allocated resources as well as the SMU
+        if (g_driver.pm_table)
+            kfree(g_driver.pm_table);
 
-    if (g_driver.drv_kobj)
-        kobject_put(g_driver.drv_kobj);
+        if (g_driver.drv_kobj)
+            kobject_put(g_driver.drv_kobj);
+    }
 
     smu_cleanup();
 }
