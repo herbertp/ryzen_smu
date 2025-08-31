@@ -11,3 +11,5 @@ userspace/monitor_cpu
 Module.symvers
 modules.order
 NOTES.txt
+
+ryzen_smu

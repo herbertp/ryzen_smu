@@ -44,8 +44,8 @@ dkms-install:
 		-i $(DKMS_ROOT_PATH)/dkms.conf
 
 	dkms add ryzen_smu/$(VERSION)
-	dkms build ryzen_smu/$(VERSION)
-	dkms install ryzen_smu/$(VERSION)
+	dkms build -k $(TARGET) ryzen_smu/$(VERSION)
+	dkms install -k $(TARGET) ryzen_smu/$(VERSION)
 
 dkms-uninstall:
 	dkms remove ryzen_smu/$(VERSION) --all
