@@ -15,6 +15,8 @@
 
 #include "smu.h"
 
+static bool g_initialized;
+
 #ifndef KBUILD_MODNAME
     #define KBUILD_MODNAME "ryzen_smu"
 #endif
@@ -338,6 +340,10 @@ static int ryzen_smu_get_version(enum smu_mailbox mb, int show) {
 
 static int ryzen_smu_probe(struct pci_dev *dev, const struct pci_device_id *id) {
     enum smu_return_val ret;
+    int err;
+
+    if (g_initialized)
+        return 0;
 
     g_driver.device = dev;
 
@@ -379,7 +385,11 @@ static int ryzen_smu_probe(struct pci_dev *dev, const struct pci_device_id *id) 
     ret = smu_transfer_table_to_dram(g_driver.device);
     if (ret == SMU_Return_OK) {
         ret = smu_get_pm_table_version(g_driver.device, &g_driver.pm_table_version);
-        if (ret != SMU_Return_OK && ret != SMU_Return_Unsupported) {
+        if (ret == SMU_Return_Unsupported) {
+            pr_info("PM table not supported on this platform, skipping setup.");
+            goto _CONTINUE_SETUP;
+        }
+        if (ret != SMU_Return_OK) {
             pr_err("Unable to resolve which PM table version the system uses -- disabling "
                 "feature (%d)", ret);
             goto _CONTINUE_SETUP;
@@ -419,9 +429,13 @@ _CONTINUE_SETUP:
         return -ENOMEM;
     }
 
-    if (sysfs_create_group(g_driver.drv_kobj, &drv_attr_group))
+    err = sysfs_create_group(g_driver.drv_kobj, &drv_attr_group);
+    if (err) {
         kobject_put(g_driver.drv_kobj);
+        return err;
+    }
 
+    g_initialized = true;
     return 0;
 }
 
@@ -434,6 +448,8 @@ static void ryzen_smu_remove(struct pci_dev *dev) {
         kobject_put(g_driver.drv_kobj);
 
     smu_cleanup();
+
+    g_initialized = false;
 }
 
 static struct pci_device_id ryzen_smu_id_table[] = {
