@@ -156,15 +156,16 @@ def test_get_version():
     if args == False:
         return False
 
-    v_test = "{:d}.{:d}.{:d}\n".format(
-        args[0] >> 16 & 0xFF, args[0] >> 8 & 0xFF, args[0] & 0xFF
+    v_test = "{:d}.{:d}.{:d}.{:d}".format(
+        args[0] >> 24, args[0] >> 16 & 0xFF, args[0] >> 8 & 0xFF, args[0] & 0xFF
     )
 
-    if v_test == read_file_str(VER_PATH, 8):
+    if v_test == read_file_str(VER_PATH, 10):
         print("Retrieved SMU Version: v{0}".format(v_test.split("\n")[0]))
         return True
 
     print("SMU Test: Failed!")
+    print(">{:s}< != >{:s}<".format(v_test, read_file_str(VER_PATH, 10)))
     return False
 
 
